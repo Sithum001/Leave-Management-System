@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { Mail, Lock, ArrowRight, Briefcase } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Briefcase, AlertCircle } from 'lucide-react';
 
 const DEMO_ACCOUNTS = [
   { label: 'Admin', email: 'admin@abc.com', role: 'Full access' },
@@ -14,23 +14,31 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, mockAuthEnabled } = useAuth();
+  const [error, setError] = useState('');
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
     setLoading(true);
     try {
       await login(email, password);
       navigate('/dashboard');
     } catch (err) {
-      toast.error(
-        mockAuthEnabled
-          ? 'Invalid demo credentials. Use one of the demo emails with password: admin123'
-          : err?.response?.data?.error || 'Invalid credentials.'
-      );
-    } finally {
+      // Always re-enable the form
       setLoading(false);
+      if (!err.response) {
+        // Network error — backend not running
+        setError('Cannot reach the server. Make sure the backend is running on port 8080.');
+        toast.error('Backend not reachable. Run: go run ./cmd/server');
+      } else if (err.response.status === 401) {
+        setError('Invalid email or password. Default password is: admin123');
+        toast.error('Invalid credentials');
+      } else {
+        setError('Something went wrong. Please try again.');
+        toast.error('Login failed');
+      }
     }
   };
 
@@ -61,13 +69,16 @@ export default function Login() {
         <div className="bg-white rounded-3xl shadow-2xl p-8">
           <h2 className="text-xl font-bold text-slate-800 mb-6">Sign in to continue</h2>
 
-          {mockAuthEnabled && (
-            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
-              Mock auth mode is enabled. Login works with demo accounts only.
-            </div>
-          )}
-
           <form onSubmit={handleSubmit} className="space-y-4">
+
+            {/* Error banner */}
+            {error && (
+              <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
             <div>
               <label className="label">Email address</label>
               <div className="relative">
@@ -75,9 +86,10 @@ export default function Login() {
                 <input
                   type="email"
                   value={email}
-                  onChange={e => setEmail(e.target.value)}
+                  onChange={e => { setEmail(e.target.value); setError(''); }}
                   className="input pl-10"
                   placeholder="you@abc.com"
+                  disabled={loading}
                   required
                 />
               </div>
@@ -90,9 +102,10 @@ export default function Login() {
                 <input
                   type="password"
                   value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  onChange={e => { setPassword(e.target.value); setError(''); }}
                   className="input pl-10"
                   placeholder="••••••••"
+                  disabled={loading}
                   required
                 />
               </div>
@@ -100,7 +113,10 @@ export default function Login() {
 
             <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2 mt-2">
               {loading ? (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Signing in...
+                </>
               ) : (
                 <>Sign In <ArrowRight className="w-4 h-4" /></>
               )}
