@@ -1,10 +1,8 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -53,12 +51,10 @@ func CreateUser(c *gin.Context) {
 
 	joinDate := time.Now()
 	if req.JoinDate != "" {
-		parsedJoinDate, err := parseJoinDate(req.JoinDate)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
+		parsed, err := time.Parse("2006-01-02", req.JoinDate)
+		if err == nil {
+			joinDate = parsed
 		}
-		joinDate = parsedJoinDate
 	}
 
 	var userID int
@@ -73,43 +69,14 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
-	// Initialize leave balances for current year
-	year := time.Now().Year()
-	leaveTypes := []struct {
-		lt   string
-		days float64
-	}{
-		{"annual", 15}, {"sick", 10}, {"personal", 3},
-		{"maternity", 90}, {"paternity", 7}, {"unpaid", 0},
-	}
-	for _, lt := range leaveTypes {
-		database.DB.Exec(
-			`INSERT INTO leave_balances (user_id, year, leave_type, total_days, used_days, pending_days)
-			 VALUES ($1,$2,$3,$4,0,0) ON CONFLICT DO NOTHING`,
-			userID, year, lt.lt, lt.days,
-		)
-	}
+	// Initialize leave balances for current year and next year
+	currentYear := time.Now().Year()
+	database.InitBalancesForUser(userID, currentYear)
+	database.InitBalancesForUser(userID, currentYear+1)
 
 	var user models.User
 	database.DB.Get(&user, "SELECT id, employee_id, name, email, password_hash, role, department, position, manager_id, avatar_url, join_date, is_active, created_at FROM users WHERE id = $1", userID)
 	c.JSON(http.StatusCreated, user)
-}
-
-func parseJoinDate(raw string) (time.Time, error) {
-	value := strings.TrimSpace(raw)
-	if value == "" {
-		return time.Time{}, nil
-	}
-
-	if t, err := time.Parse("2006-01-02", value); err == nil {
-		return t, nil
-	}
-
-	if t, err := time.Parse(time.RFC3339, value); err == nil {
-		return t, nil
-	}
-
-	return time.Time{}, fmt.Errorf("join_date must be in YYYY-MM-DD or RFC3339 format")
 }
 
 func UpdateUser(c *gin.Context) {
@@ -162,6 +129,8 @@ func GetLeaveBalances(c *gin.Context) {
 	requesterID, _ := c.Get("user_id")
 	role, _ := c.Get("role")
 
+	// Everyone can see their own balances
+	// Admins and managers can see anyone's balances
 	if role != "admin" && role != "manager" && requesterID.(int) != id {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden"})
 		return
@@ -172,9 +141,16 @@ func GetLeaveBalances(c *gin.Context) {
 		year, _ = strconv.Atoi(y)
 	}
 
+	// Auto-create balances if they don't exist yet for this user+year
+	database.InitBalancesForUser(id, year)
+
 	var balances []models.LeaveBalance
 	err := database.DB.Select(&balances,
-		"SELECT * FROM leave_balances WHERE user_id=$1 AND year=$2 ORDER BY leave_type", id, year)
+		`SELECT * FROM leave_balances 
+		 WHERE user_id=$1 AND year=$2 
+		 AND leave_type IN ('annual','sick','personal','maternity','paternity','unpaid')
+		 ORDER BY leave_type`,
+		id, year)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

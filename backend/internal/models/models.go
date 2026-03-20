@@ -5,9 +5,9 @@ import "time"
 type Role string
 
 const (
-	RoleEmployee Role = "employee"
-	RoleManager  Role = "manager"
-	RoleAdmin    Role = "admin"
+	RoleEmployee  Role = "employee"
+	RoleManager   Role = "manager"
+	RoleAdmin     Role = "admin"
 )
 
 type LeaveStatus string
@@ -30,19 +30,19 @@ const (
 )
 
 type User struct {
-	ID         int       `db:"id" json:"id"`
-	EmployeeID string    `db:"employee_id" json:"employee_id"`
-	Name       string    `db:"name" json:"name"`
-	Email      string    `db:"email" json:"email"`
-	Password   string    `db:"password_hash" json:"-"`
-	Role       Role      `db:"role" json:"role"`
-	Department string    `db:"department" json:"department"`
-	Position   string    `db:"position" json:"position"`
-	ManagerID  *int      `db:"manager_id" json:"manager_id,omitempty"`
-	AvatarURL  string    `db:"avatar_url" json:"avatar_url"`
-	JoinDate   time.Time `db:"join_date" json:"join_date"`
-	IsActive   bool      `db:"is_active" json:"is_active"`
-	CreatedAt  time.Time `db:"created_at" json:"created_at"`
+	ID           int       `db:"id" json:"id"`
+	EmployeeID   string    `db:"employee_id" json:"employee_id"`
+	Name         string    `db:"name" json:"name"`
+	Email        string    `db:"email" json:"email"`
+	Password     string    `db:"password_hash" json:"-"`
+	Role         Role      `db:"role" json:"role"`
+	Department   string    `db:"department" json:"department"`
+	Position     string    `db:"position" json:"position"`
+	ManagerID    *int      `db:"manager_id" json:"manager_id,omitempty"`
+	AvatarURL    string    `db:"avatar_url" json:"avatar_url"`
+	JoinDate     time.Time `db:"join_date" json:"join_date"`
+	IsActive     bool      `db:"is_active" json:"is_active"`
+	CreatedAt    time.Time `db:"created_at" json:"created_at"`
 }
 
 type LeaveBalance struct {

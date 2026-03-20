@@ -192,10 +192,13 @@ export default function Leaves() {
     try {
       const [leavesRes, balRes] = await Promise.all([
         leavesApi.getAll(statusFilter ? { status: statusFilter } : {}),
-        user.role === 'employee' ? usersApi.getBalances(user.id) : Promise.resolve({ data: [] }),
+        usersApi.getBalances(user.id),
       ]);
-      setLeaves(leavesRes.data);
-      setBalances(balRes.data);
+      setLeaves(leavesRes.data || []);
+      setBalances(balRes.data || []);
+    } catch (err) {
+      setLeaves([]);
+      setBalances([]);
     } finally {
       setLoading(false);
     }
@@ -203,9 +206,9 @@ export default function Leaves() {
 
   useEffect(() => { loadData(); }, [statusFilter]);
 
-  const filtered = leaves.filter(l =>
-    l.user_name.toLowerCase().includes(search.toLowerCase()) ||
-    l.leave_type.includes(search.toLowerCase()) ||
+  const filtered = (leaves || []).filter(l =>
+    l.user_name?.toLowerCase().includes(search.toLowerCase()) ||
+    l.leave_type?.includes(search.toLowerCase()) ||
     l.department?.toLowerCase().includes(search.toLowerCase())
   );
 

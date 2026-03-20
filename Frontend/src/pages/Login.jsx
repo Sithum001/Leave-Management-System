@@ -123,22 +123,8 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Demo accounts */}
-          <div className="mt-6 pt-6 border-t border-slate-100">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Demo Accounts (password: admin123)</p>
-            <div className="grid grid-cols-3 gap-2">
-              {DEMO_ACCOUNTS.map(acc => (
-                <button
-                  key={acc.email}
-                  onClick={() => fillDemo(acc)}
-                  className="flex flex-col items-center p-3 rounded-xl border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all text-left group"
-                >
-                  <span className="text-xs font-bold text-slate-700 group-hover:text-brand-600">{acc.label}</span>
-                  <span className="text-[10px] text-slate-400 mt-0.5">{acc.role}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          
+          
         </div>
       </div>
     </div>

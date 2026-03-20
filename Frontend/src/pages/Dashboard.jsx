@@ -49,11 +49,14 @@ export default function Dashboard() {
     Promise.all([
       dashboardApi.get(),
       leavesApi.getAll({ status: '' }),
-      user.role === 'employee' ? usersApi.getBalances(user.id) : Promise.resolve({ data: [] }),
+      usersApi.getBalances(user.id),
     ]).then(([dash, leaves, bal]) => {
       setData(dash.data);
-      setRecentLeaves(leaves.data.slice(0, 5));
-      setBalances(bal.data);
+      setRecentLeaves((leaves.data || []).slice(0, 5));
+      setBalances(bal.data || []);
+    }).catch(() => {
+      setRecentLeaves([]);
+      setBalances([]);
     }).finally(() => setLoading(false));
   }, [user]);
 

@@ -117,8 +117,12 @@ func CreateLeaveRequest(c *gin.Context) {
 		return
 	}
 
-	// Check balance
+	// Auto-initialize balances for this user+year if they don't exist yet
+	// This ensures admin and manager can also apply for leave
 	year := startDate.Year()
+	database.InitBalancesForUser(userID.(int), year)
+
+	// Check balance
 	var balance models.LeaveBalance
 	err = database.DB.Get(&balance,
 		"SELECT * FROM leave_balances WHERE user_id=$1 AND year=$2 AND leave_type=$3",

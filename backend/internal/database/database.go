@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var DB *sqlx.DB
@@ -98,6 +100,29 @@ func Migrate() {
 	log.Println("Migrations applied successfully")
 }
 
+// InitBalancesForUser creates leave balance rows for a user for the given year.
+// Called both from Seed() and from CreateUser handler.
+func InitBalancesForUser(userID int, year int) {
+	leaveTypes := []struct {
+		lt   string
+		days float64
+	}{
+		{"annual", 15},
+		{"sick", 10},
+		{"personal", 3},
+		{"maternity", 90},
+		{"paternity", 7},
+		{"unpaid", 0},
+	}
+	for _, lt := range leaveTypes {
+		DB.Exec(
+			`INSERT INTO leave_balances (user_id, year, leave_type, total_days, used_days, pending_days)
+			 VALUES ($1, $2, $3, $4, 0, 0) ON CONFLICT DO NOTHING`,
+			userID, year, lt.lt, lt.days,
+		)
+	}
+}
+
 func Seed() {
 	// Check if already seeded
 	var count int
@@ -106,45 +131,59 @@ func Seed() {
 		return
 	}
 
-	seed := `
-	-- Admin user (password: admin123)
+	// Generate a real bcrypt hash for "admin123" at runtime
+	hashBytes, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+	if err != nil {
+		log.Fatalf("Failed to generate password hash: %v", err)
+	}
+	hash := string(hashBytes)
+
+	seed := fmt.Sprintf(`
 	INSERT INTO users (employee_id, name, email, password_hash, role, department, position, join_date) VALUES
-	('EMP001', 'Sarah Chen', 'admin@abc.com', '$2a$10$rJ9Qb5VXvA.8kQHBvH3.N.7K9mJJp7W3L8tVXV8Y9qN1P2R3S4T5U', 'admin', 'Administration', 'System Administrator', '2020-01-15'),
-	('EMP002', 'Michael Torres', 'manager@abc.com', '$2a$10$rJ9Qb5VXvA.8kQHBvH3.N.7K9mJJp7W3L8tVXV8Y9qN1P2R3S4T5U', 'manager', 'Engineering', 'Engineering Manager', '2019-03-10'),
-	('EMP003', 'Priya Sharma', 'priya@abc.com', '$2a$10$rJ9Qb5VXvA.8kQHBvH3.N.7K9mJJp7W3L8tVXV8Y9qN1P2R3S4T5U', 'employee', 'Engineering', 'Senior Developer', '2021-06-01'),
-	('EMP004', 'James Wilson', 'james@abc.com', '$2a$10$rJ9Qb5VXvA.8kQHBvH3.N.7K9mJJp7W3L8tVXV8Y9qN1P2R3S4T5U', 'employee', 'Engineering', 'Frontend Developer', '2022-02-14'),
-	('EMP005', 'Lisa Park', 'lisa@abc.com', '$2a$10$rJ9Qb5VXvA.8kQHBvH3.N.7K9mJJp7W3L8tVXV8Y9qN1P2R3S4T5U', 'employee', 'Marketing', 'Marketing Specialist', '2021-09-20');
+	('EMP001', 'Piumini Tishani',   'admin@abc.com',   '%s', 'admin',    'Administration', 'System Administrator', '2020-01-15'),
+	('EMP002', 'Malidu Kavishka',   'manager@abc.com', '%s', 'manager',  'Engineering',    'Engineering Manager',  '2019-03-10'),
+	('EMP003', 'Dilshan Hansaka',   'dilshan@abc.com', '%s', 'employee', 'Engineering',    'Senior Developer',     '2021-06-01'),
+	('EMP004', 'Shamith De Silva',  'shamith@abc.com', '%s', 'employee', 'Engineering',    'Frontend Developer',   '2022-02-14'),
+	('EMP005', 'Malisha Sandalika', 'malisha@abc.com', '%s', 'employee', 'Marketing',      'Marketing Specialist', '2021-09-20');
 
-	-- Set manager IDs
 	UPDATE users SET manager_id = 2 WHERE employee_id IN ('EMP003', 'EMP004');
+	`, hash, hash, hash, hash, hash)
 
-	-- Leave balances for 2025
-	INSERT INTO leave_balances (user_id, year, leave_type, total_days, used_days, pending_days) VALUES
-	(3, 2025, 'annual', 15, 5, 0),
-	(3, 2025, 'sick', 10, 2, 0),
-	(3, 2025, 'personal', 3, 1, 0),
-	(4, 2025, 'annual', 15, 3, 2),
-	(4, 2025, 'sick', 10, 0, 0),
-	(4, 2025, 'personal', 3, 0, 0),
-	(5, 2025, 'annual', 15, 8, 0),
-	(5, 2025, 'sick', 10, 1, 0),
-	(5, 2025, 'personal', 3, 2, 0);
-
-	-- Sample leave requests
-	INSERT INTO leave_requests (user_id, leave_type, start_date, end_date, total_days, reason, status, reviewer_id, review_comment, reviewed_at) VALUES
-	(3, 'annual', '2025-07-14', '2025-07-18', 5, 'Family vacation to Bali', 'approved', 2, 'Approved. Enjoy your vacation!', NOW() - INTERVAL '20 days'),
-	(3, 'sick', '2025-08-05', '2025-08-06', 2, 'Flu and fever', 'approved', 2, 'Get well soon.', NOW() - INTERVAL '10 days'),
-	(4, 'annual', '2025-09-01', '2025-09-03', 3, 'Personal errands', 'pending', NULL, '', NULL),
-	(4, 'annual', '2025-10-20', '2025-10-21', 2, 'Attending a wedding', 'pending', NULL, '', NULL),
-	(5, 'annual', '2025-06-02', '2025-06-09', 8, 'Extended holiday trip', 'approved', 1, 'Approved.', NOW() - INTERVAL '30 days'),
-	(5, 'sick', '2025-08-12', '2025-08-12', 1, 'Doctor appointment', 'approved', 1, 'Approved.', NOW() - INTERVAL '5 days'),
-	(5, 'personal', '2025-09-15', '2025-09-16', 2, 'Moving house', 'rejected', 1, 'Too many employees on leave that week.', NOW() - INTERVAL '2 days');
-	`
-
-	_, err := DB.Exec(seed)
+	_, err = DB.Exec(seed)
 	if err != nil {
 		log.Printf("Seed warning: %v", err)
-	} else {
-		log.Println("Database seeded successfully")
+		return
 	}
+
+	// Initialize leave balances for ALL users for both current and next year
+	currentYear := time.Now().Year()
+	for userID := 1; userID <= 5; userID++ {
+		InitBalancesForUser(userID, currentYear)
+		InitBalancesForUser(userID, currentYear-1)
+	}
+
+	// Add some sample used/pending days for employees (ids 3,4,5) for current year
+	DB.Exec(`
+		UPDATE leave_balances SET used_days = 5 WHERE user_id = 3 AND year = $1 AND leave_type = 'annual';
+		UPDATE leave_balances SET used_days = 2 WHERE user_id = 3 AND year = $1 AND leave_type = 'sick';
+		UPDATE leave_balances SET used_days = 1 WHERE user_id = 3 AND year = $1 AND leave_type = 'personal';
+		UPDATE leave_balances SET used_days = 3, pending_days = 2 WHERE user_id = 4 AND year = $1 AND leave_type = 'annual';
+		UPDATE leave_balances SET used_days = 8 WHERE user_id = 5 AND year = $1 AND leave_type = 'annual';
+		UPDATE leave_balances SET used_days = 1 WHERE user_id = 5 AND year = $1 AND leave_type = 'sick';
+		UPDATE leave_balances SET used_days = 2 WHERE user_id = 5 AND year = $1 AND leave_type = 'personal';
+	`, currentYear)
+
+	// Sample leave requests
+	DB.Exec(`
+		INSERT INTO leave_requests (user_id, leave_type, start_date, end_date, total_days, reason, status, reviewer_id, review_comment, reviewed_at, updated_at) VALUES
+		(3, 'annual',   '2025-07-14', '2025-07-18', 5, 'Family vacation to Bali',              'approved', 2, 'Approved. Enjoy your vacation!',         NOW() - INTERVAL '20 days', NOW()),
+		(3, 'sick',     '2025-08-05', '2025-08-06', 2, 'Flu and fever',                        'approved', 2, 'Get well soon.',                         NOW() - INTERVAL '10 days', NOW()),
+		(4, 'annual',   '2025-09-01', '2025-09-03', 3, 'Personal errands',                     'pending',  NULL, '', NULL, NOW()),
+		(4, 'annual',   '2025-10-20', '2025-10-21', 2, 'Attending a wedding',                  'pending',  NULL, '', NULL, NOW()),
+		(5, 'annual',   '2025-06-02', '2025-06-09', 8, 'Extended holiday trip',                'approved', 1, 'Approved.',                              NOW() - INTERVAL '30 days', NOW()),
+		(5, 'sick',     '2025-08-12', '2025-08-12', 1, 'Doctor appointment',                   'approved', 1, 'Approved.',                              NOW() - INTERVAL '5 days',  NOW()),
+		(5, 'personal', '2025-09-15', '2025-09-16', 2, 'Moving house',                         'rejected', 1, 'Too many employees on leave that week.', NOW() - INTERVAL '2 days',  NOW());
+	`)
+
+	log.Println("Database seeded successfully")
 }
